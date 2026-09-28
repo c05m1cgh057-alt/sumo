@@ -100,31 +100,40 @@ function draw(){g.setTransform(1,0,0,1,0,TOP);
   g.fillText('Red (2P): Left / Right move, Up jump',W/2,325);
   g.fillText('Ball hits your floor = point for the other side. Bounce it over the net.',W/2,355);
   g.fillText('Mid-air: hold S / Down to drop faster. Press jump against a wall or the net to kick off it (2 per jump).',W/2,380)}}
-let online=0,isHost=0,peer=null,conn=null,ri={l:0,r:0,j:0,dn:0},sacc=0,iacc=0,overT=0,uiOpen=0;
+let online=0,isHost=0,peer=null,conn=null,ri={l:0,r:0,j:0,dn:0},sacc=0,iacc=0,overT=0,uiOpen=0,started=0;
 const ui=document.getElementById('ui'),msgEl=document.getElementById('msg'),ob=document.getElementById('ob');
 const say=t=>msgEl.textContent=t,q=v=>Math.round(v*10)/10;
 function openUI(){ui.style.display='flex';uiOpen=1;say('')}
 function closeUI(){ui.style.display='none';uiOpen=0}
-function leave(m){try{peer&&peer.destroy()}catch(e){}peer=conn=null;online=0;isHost=0;st='menu';ob.style.display='block';if(m){openUI();say(m)}}
+function leave(m){try{peer&&peer.destroy()}catch(e){}peer=conn=null;started=0;online=0;isHost=0;st='menu';ob.style.display='block';if(m){openUI();say(m)}}
 function snap(){return{p:ps.map(p=>[q(p.x),q(p.y),q(p.fx)]),b:[q(ball.x),q(ball.y)],sc,pause:q(pause),flash,st}}
+const ICE={iceServers:[{urls:'stun:stun.l.google.com:19302'},{urls:'stun:stun.cloudflare.com:3478'},
+ {urls:'turn:openrelay.metered.ca:80',username:'openrelayproject',credential:'openrelayproject'},
+ {urls:'turn:openrelay.metered.ca:443?transport=tcp',username:'openrelayproject',credential:'openrelayproject'}]};
+function begin(){if(started)return;started=1;closeUI();ob.style.display='none';if(isHost)go();else{cpu=1;reset(0);st='play'}}
+function track(cn){const pc=cn.peerConnection;
+ if(pc)pc.addEventListener('iceconnectionstatechange',()=>say('Link: '+pc.iceConnectionState));
+ setTimeout(()=>{if(!started)say('Still connecting... a network may be blocking direct links. Link: '+(pc?pc.iceConnectionState:'unknown'))},12000)}
 function wire(cn){
- cn.on('data',d=>{if(isHost){ri=d;return}
+ cn.on('data',d=>{if(!started)begin();if(isHost){ri=d;return}
   if(!ps)reset(0);ps.forEach((p,i)=>{p.tx=d.p[i][0];p.ty=d.p[i][1];p.fx=d.p[i][2]});
   ball.tx=d.b[0];ball.ty=d.b[1];sc=d.sc;pause=d.pause;flash=d.flash;st=d.st});
- cn.on('close',()=>leave('Friend disconnected.'))}
+ cn.on('open',begin);
+ cn.on('close',()=>leave('Friend disconnected.'));
+ cn.on('error',e=>say('Connection error: '+e))}
 function hostGame(){
  if(typeof Peer=='undefined')return say('PeerJS failed to load (check your connection).');
  online=1;isHost=1;cpu=1;const A='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';let c='';for(let i=0;i<5;i++)c+=A[Math.random()*A.length|0];
- peer=new Peer('sumovb-'+c);
+ peer=new Peer('sumovb-'+c,{config:ICE});
  peer.on('open',()=>say('Room code: '+c+'  (send it to your friend and keep this tab open)'));
- peer.on('connection',cn=>{conn=cn;ri={l:0,r:0,j:0,dn:0};wire(cn);cn.on('open',()=>{closeUI();ob.style.display='none';go()})});
+ peer.on('connection',cn=>{if(conn&&conn.open){cn.close();return}
+  conn=cn;ri={l:0,r:0,j:0,dn:0};wire(cn);track(cn);say('Friend found, connecting...');if(cn.open)begin()});
  peer.on('error',e=>say('Error: '+e.type))}
 function joinGame(){
  if(typeof Peer=='undefined')return say('PeerJS failed to load (check your connection).');
  const c=document.getElementById('cd').value.toUpperCase().trim();if(c.length<5)return say('Enter the 5-letter room code.');
- online=1;isHost=0;say('Connecting...');peer=new Peer();
- peer.on('open',()=>{conn=peer.connect('sumovb-'+c);wire(conn);
-  conn.on('open',()=>{closeUI();ob.style.display='none';cpu=1;reset(0);st='play'})});
+ online=1;isHost=0;say('Connecting...');peer=new Peer(undefined,{config:ICE});
+ peer.on('open',()=>{conn=peer.connect('sumovb-'+c);wire(conn);track(conn);if(conn.open)begin()});
  peer.on('error',e=>leave(e.type=='peer-unavailable'?'Room not found - check the code.':'Error: '+e.type))}
 function netGuest(dt){
  iacc+=dt;if(iacc>=1/60&&conn&&conn.open){iacc=0;
