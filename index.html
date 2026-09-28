@@ -10,35 +10,58 @@ canvas{width:min(100vw,142vh);aspect-ratio:1020/720;display:block;touch-action:n
 const cv=document.getElementById('c'),g=cv.getContext('2d'),W=1020,H=500,GY=390,R=38,BR=14,BG=630,PG=1500,WIN=7,WL=30,WR=990,NX=510,CE=30,TOP=220;
 const K={},cl=(v,a,b)=>Math.max(a,Math.min(b,v));
 let st='menu',cpu=1,ps,ball,sc=[0,0],pause=0,flash='',acc=0,lt=0;
-const TH=['Skate Rink','Farm'],SUB=['Neon roller rink','Sunny farm'],TN=[['White','Green'],['Cow','Pig']],CARD=[240,520];let th=0;
+const TH=['Skate Rink','Farm'],SUB=['Neon roller rink','Sunny farm'],TN=[['White','Green'],['Cow','Pig']],CARD=[240,520],BTN=[240,425,610];let th=0;
 addEventListener('keydown',e=>{K[e.code]=1;if(/Arrow|Space/.test(e.code))e.preventDefault();
  if(st!='play'){if(e.code=='ArrowLeft'||e.code=='KeyA')th=0;if(e.code=='ArrowRight'||e.code=='KeyD')th=1;
-  if(e.code=='Digit1'||e.code=='Enter'){cpu=1;go()}if(e.code=='Digit2'){cpu=0;go()}}});
+  if(e.code=='Digit1'||e.code=='Enter'){cpu=1;go()}if(e.code=='Digit3'){cpu=2;go()}if(e.code=='Digit2'){cpu=0;go()}}});
 addEventListener('keyup',e=>K[e.code]=0);
 cv.addEventListener('pointerdown',e=>{if(st!='play'){const r=cv.getBoundingClientRect(),x=(e.clientX-r.left)/r.width*W,y=(e.clientY-r.top)/r.height*(H+TOP);
- const k=CARD.findIndex(c=>x>=c&&x<=c+260);if(k<0)return;
- if(y>=192&&y<=276)th=k;else if(y>=312&&y<=364){cpu=k==0?1:0;go()}}});
+ const k=CARD.findIndex(c=>x>=c&&x<=c+260);
+ if(k>=0&&y>=192&&y<=276)th=k
+ if(y>=312&&y<=364){const m=BTN.findIndex(c=>x>=c&&x<=c+170);if(m>=0){cpu=[1,2,0][m];go()}}}});
 function go(){sc=[0,0];st='play';reset(Math.random()<.5?0:1)}
-function reset(s){ps=[{x:270,y:GY-R,vx:0,vy:0,c:'#3f8cff',sp:450,wj:1,jp:0,fx:0,bc:0,jbuf:0,ncb:0,wka:0},{x:750,y:GY-R,vx:0,vy:0,c:'#ff4d4d',sp:cpu?383:450,wj:1,jp:0,fx:0,bc:0,jbuf:0,ncb:0,wka:0}];
+function reset(s){ps=[{x:270,y:GY-R,vx:0,vy:0,c:'#3f8cff',sp:450,wj:1,jp:0,fx:0,bc:0,jbuf:0,ncb:0,wka:0},{x:750,y:GY-R,vx:0,vy:0,c:'#ff4d4d',sp:cpu==1?383:450,wj:1,jp:0,fx:0,bc:0,jbuf:0,ncb:0,wka:0}];
  ball={x:s?750:270,y:110,vx:0,vy:0};pause=1}
 function ai(p){const b=ball,mine=b.x>NX+4;let tx=750;
  if(mine){const tt=Math.max(0,(-b.vy+Math.sqrt(b.vy*b.vy+2*BG*(GY-100-b.y)))/BG);tx=cl(b.x+b.vx*tt+24,NX+50,WR-R)}
  const dx=tx-p.x;return[dx<-10,dx>10,mine&&Math.abs(b.x-p.x)<75&&b.y>GY-210&&b.y<GY-70&&b.vy>-40]}
+/* ---------- hard CPU: net bounces, dive-spikes, guards its side ---------- */
+function refl(x){const a=WL+BR,w=WR-BR-a;let u=(x-a)%(2*w);if(u<0)u+=2*w;return a+(u>w?2*w-u:u)}
+function tcross(Y){const b=ball,A=BG/2,B=b.vy,C=b.y-Y,D=B*B-4*A*C;if(D<0)return -1;const t=(-B+Math.sqrt(D))/(2*A);return t>=0?t:-1}
+function ai2(p){const b=ball,gr=p.y>=GY-R-.5,tl=tcross(GY-BR),Lx=refl(b.x+b.vx*Math.max(tl,0));
+ const ts=tcross(248),Xs=ts>=0?refl(b.x+b.vx*ts):b.x,cpuSide=b.x>NX+4;
+ let tx=NX+120,j=0,dn=0;
+ const netPlay=!cpuSide&&b.x>NX-200&&b.vx>-50&&b.vx<420&&b.y<290&&Lx>NX-30;
+ if(netPlay){
+  if(gr){tx=NX+46;j=Math.abs(p.x-tx)<30}
+  else{j=1;const above=p.y<b.y-25;
+   if(above&&p.vy>-80){tx=b.x+34;dn=1}
+   else tx=(p.y>190&&p.x<NX+60)?NX+3:b.x+34}}
+ else if(cpuSide||Lx>NX){
+  if(ts>=.3&&ts<1.7&&Math.abs(b.vx)<330&&Xs>NX+30&&Xs<NX+100&&Math.abs(Xs+44-p.x)<p.sp*ts+40){tx=Xs+44;
+   if(gr&&ts<.47&&Math.abs(p.x-tx)<170)j=1;
+   if(!gr){j=0;if(p.vy>-60&&p.y<b.y-15&&Math.abs(b.x-p.x)<80)dn=1}}
+  else{const tt=Math.max(0,(-b.vy+Math.sqrt(b.vy*b.vy+2*BG*(GY-100-b.y)))/BG);tx=b.x+b.vx*tt+24;
+   j=Math.abs(b.x-p.x)<75&&b.y>GY-210&&b.y<GY-70&&b.vy>-40}}
+ tx=cl(tx,NX+(netPlay?3:45),WR-R);const dx=tx-p.x;
+ return[dx<-8,dx>8,j,dn]}
 function step(dt){
  if(pause>0){pause-=dt;return}
  ps.forEach((p,i)=>{let l,r,j,dn;
   if(i==0){l=K.KeyA||(cpu&&K.ArrowLeft);r=K.KeyD||(cpu&&K.ArrowRight);j=K.KeyW||K.Space||(cpu&&K.ArrowUp);dn=K.KeyS||(cpu&&K.ArrowDown)}
-  else if(!cpu){l=K.ArrowLeft;r=K.ArrowRight;j=K.ArrowUp;dn=K.ArrowDown}else[l,r,j]=ai(p);
+  else if(!cpu){l=K.ArrowLeft;r=K.ArrowRight;j=K.ArrowUp;dn=K.ArrowDown}else[l,r,j,dn]=(cpu==2?ai2:ai)(p);
   p.jbuf=(j&&!p.jp)?.15:Math.max(0,(p.jbuf||0)-dt);
   const tv=((r?1:0)-(l?1:0))*p.sp;
   const gr=p.y>=GY-R-.5;p.fx=Math.max(0,p.fx-dt);
   if(gr)p.wka=0;else if(!j)p.wka=1;
-  if(gr){p.wj=2;p.ws=0;p.kl=0;p.vx=tv;p.bc=0}
+  if(gr){p.wj=2;p.ws=0;p.kl=0;p.vx=tv;p.bc=0;p.ft=0}
   else if((p.kl||0)>0)p.kl-=dt;
   else p.vx=tv;
   if(j&&gr)p.vy=-680;
   if(dn&&!gr)p.vy+=2600*dt;
-  p.vy+=PG*dt;p.x+=p.vx*dt;p.y+=p.vy*dt;
+  const flt=j&&!dn&&!gr&&p.vy>-60&&(p.ft=(p.ft||0))<.5;
+  if(flt)p.ft+=dt;
+  p.vy+=(flt?PG*.32:PG)*dt;p.x+=p.vx*dt;p.y+=p.vy*dt;
   if(p.y>GY-R){p.y=GY-R;p.vy=0}
   p.x=cl(p.x,WL+R,WR-R);
   {const cx=cl(p.x,NX-4,NX+4),cy=cl(p.y,255,GY),ex=p.x-cx,ey=p.y-cy,d=Math.hypot(ex,ey);
@@ -234,7 +257,7 @@ function draw(){g.setTransform(1,0,0,1,0,0);g.drawImage(BGS[th],0,0);g.setTransf
   const rr=(x,y,w,h)=>{g.beginPath();(g.roundRect||g.rect).call(g,x,y,w,h,14)};
   TH.forEach((n,k)=>{const x=CARD[k];rr(x,192,260,84);g.fillStyle=th==k?'rgba(255,255,255,.28)':'rgba(255,255,255,.08)';g.fill();g.lineWidth=3;g.strokeStyle=th==k?'#fff':'rgba(255,255,255,.3)';g.stroke();
    g.fillStyle='#fff';g.font='bold 26px system-ui,sans-serif';g.fillText(n,x+130,230);g.font='14px system-ui,sans-serif';g.fillText(SUB[k],x+130,256)});
-  [['1  -  vs CPU','#3f8cff'],['2  -  2 Players','#ff8c3f']].forEach((b,k)=>{const x=CARD[k];rr(x,312,260,52);g.globalAlpha=.8;g.fillStyle=b[1];g.fill();g.globalAlpha=1;g.fillStyle='#fff';g.font='bold 22px system-ui,sans-serif';g.fillText(b[0],x+130,346)});
+  [['1 - CPU Normal','#3f8cff'],['3 - CPU Hard','#e0423f'],['2 - 2 Players','#ff8c3f']].forEach((b,k)=>{const x=BTN[k];rr(x,312,170,52);g.globalAlpha=.8;g.fillStyle=b[1];g.fill();g.globalAlpha=1;g.fillStyle='#fff';g.font='bold 18px system-ui,sans-serif';g.fillText(b[0],x+85,344)});
   g.font='15px system-ui,sans-serif';g.fillStyle='#cfe';
   g.fillText(TN[th][0]+': A / D move, W or Space jump   (arrows also work vs CPU)',W/2,415);
   g.fillText(TN[th][1]+' (2P): Left / Right move, Up jump',W/2,440);
